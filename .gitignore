@@ -18,6 +18,7 @@ coverage/
 .next/
 .nuxt/
 .svelte-kit/
+.bolt/
 tmp/
 temp/
 
