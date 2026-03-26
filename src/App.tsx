@@ -51,6 +51,7 @@ function App() {
     setError(null);
 
     try {
+      console.debug('[DEBUG] Frontend calling /runPipeline', { topic });
       const response = await fetch('http://localhost:3001/runPipeline', {
         method: 'POST',
         headers: {
@@ -64,12 +65,20 @@ function App() {
       }
 
       const result: PipelineData = await response.json();
+      console.debug('[DEBUG] Frontend received /runPipeline response', {
+        hasDraft: Boolean(result.draft),
+        outputKeys: Object.keys(result.outputs || {}),
+        logCount: result.logs?.length ?? 0,
+      });
 
       // Reveal each stage progressively for a smoother UX.
       setLoading(false);
       setRevealing(true);
 
       setData({ draft: result.draft });
+      console.debug('[DEBUG] Rendering backend draft output', {
+        draftLength: result.draft.length,
+      });
       setCompletedStep(1);
       await wait(400);
 
@@ -84,6 +93,11 @@ function App() {
         ...(prev || {}),
         outputs: result.outputs,
       }));
+      console.debug('[DEBUG] Rendering backend adapted outputs', {
+        linkedinLength: result.outputs.linkedin.length,
+        twitterLength: result.outputs.twitter.length,
+        faqLength: result.outputs.faq.length,
+      });
       setCompletedStep(3);
       await wait(350);
 

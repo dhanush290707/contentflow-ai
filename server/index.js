@@ -1,86 +1,447 @@
 import express from 'express';
 import cors from 'cors';
+import dotenv from 'dotenv';
+import path from 'path';
+import { fileURLToPath } from 'url';
+
+const __filename = fileURLToPath(import.meta.url);
+const __dirname = path.dirname(__filename);
+
+dotenv.config({ path: path.join(__dirname, '.env'), quiet: true });
 
 const app = express();
 const PORT = 3001;
+const OPENROUTER_API_KEY = process.env.OPENROUTER_API_KEY;
 
 app.use(cors());
 app.use(express.json());
 
+const AI_FALLBACK_MESSAGE = 'AI service temporarily unavailable. Showing fallback content.';
+
+function createFallbackText(kind, topic = 'this topic') {
+  switch (kind) {
+    case 'draft':
+      return `${AI_FALLBACK_MESSAGE}
+
+Topic: ${topic}
+
+This fallback draft summarizes the core idea, why it matters to the audience, and the practical value it can provide. It is safe to continue the pipeline with this content while the AI service recovers.`;
+    case 'linkedin':
+      return `${AI_FALLBACK_MESSAGE}
+
+${topic} still matters because teams need clearer messaging, practical value, and consistent execution.
+
+What would you want to highlight first?
+
+#AI #Content #Strategy`;
+    case 'twitter':
+      return `${AI_FALLBACK_MESSAGE}\n\nClear messaging, practical value, and consistent execution for ${topic} still matter. #AI #Content`;
+    case 'faq':
+      return `${AI_FALLBACK_MESSAGE}
+
+Q: What is this content about?
+A: It provides a fallback summary for ${topic} while the AI service is unavailable.
+
+Q: Can the pipeline still continue?
+A: Yes. The backend is designed to keep the workflow running with fallback content.
+
+Q: Is the frontend still using the API response?
+A: Yes. The frontend continues to render the backend response even when fallback content is used.`;
+    default:
+      return AI_FALLBACK_MESSAGE;
+  }
+}
+
 function generateDraft(input) {
   console.log('Agent 1: Draft generation started');
 
-  return `Initial draft for: "${input}"\n\nThis is a comprehensive overview of ${input}. We've analyzed the key aspects and created a foundation for your content strategy.\n\nKey Points:\n• Market relevance and audience targeting\n• Core messaging and value proposition\n• Strategic positioning and differentiation\n• Call-to-action framework`;
+  const prompt = `Write a high-quality enterprise blog post.
+
+Topic: ${input}
+
+Structure:
+
+1. Strong engaging introduction (no generic phrases)
+2. Problem explanation (why this matters)
+3. 3 key insights with real-world value
+4. Practical business benefits
+5. Strong conclusion with CTA
+
+Rules:
+
+* DO NOT use phrases like 'comprehensive overview'
+* Make it sound like a real industry expert
+* Use natural, human tone`;
+
+  console.log('Agent 1: Draft prompt:', prompt);
+  return prompt;
+}
+
+async function callAI(prompt) {
+  console.log('[DEBUG] callAI invoked', {
+    promptPreview: prompt.slice(0, 120),
+    promptLength: prompt.length,
+  });
+
+  try {
+    if (!OPENROUTER_API_KEY) {
+      throw new Error('OPENROUTER_API_KEY is not configured');
+    }
+
+    const apiResponse = await fetch('https://openrouter.ai/api/v1/chat/completions', {
+      method: 'POST',
+      headers: {
+        Authorization: `Bearer ${OPENROUTER_API_KEY}`,
+        'Content-Type': 'application/json',
+      },
+      body: JSON.stringify({
+        model: 'meta-llama/llama-3-8b-instruct',
+        messages: [
+          {
+            role: 'user',
+            content: prompt,
+          },
+        ],
+        temperature: 0.7,
+      }),
+    });
+
+    if (!apiResponse.ok) {
+      const errorText = await apiResponse.text();
+      throw new Error(`OpenRouter API request failed: ${apiResponse.status} ${errorText}`);
+    }
+
+    const response = await apiResponse.json();
+    console.log('FULL AI RESPONSE:', JSON.stringify(response?.data, null, 2));
+
+    const responseData = response?.data ?? response;
+    const messageContent = responseData?.choices?.[0]?.message?.content;
+    const textContent = responseData?.choices?.[0]?.text;
+    const output = [messageContent, textContent]
+      .find((value) => typeof value === 'string' && value.trim().length > 0)
+      ?.trim() || '';
+
+    if (output) {
+      console.log('AI response generated');
+      console.log('[DEBUG] callAI completed', {
+        outputLength: output.length,
+        hasOutput: true,
+      });
+      return output;
+    }
+  } catch (error) {
+    console.error('[ERROR] callAI failed', {
+      message: error instanceof Error ? error.message : 'Unknown AI error',
+      error,
+    });
+  }
+
+  console.log('AI failed, using fallback');
+  return AI_FALLBACK_MESSAGE;
 }
 
 function checkCompliance(content) {
   console.log('Agent 2: Compliance check started');
 
-  const fixedContent = `${content}\n\n[Compliance Note] Content reviewed and approved with no blocking issues.`;
+  const bannedWords = [
+    'guarantee',
+    'guarantees',
+    '100% safe',
+    'no risk',
+    'assured returns',
+    'risk-free',
+  ];
+
+  const replacementRules = [
+    { from: '100% safe', to: 'highly secure' },
+    { from: 'no risk', to: 'managed risk' },
+    { from: 'assured returns', to: 'potential returns' },
+    { from: 'risk-free', to: 'managed risk' },
+    { from: 'guarantees', to: 'aims to provide' },
+    { from: 'guarantee', to: 'aims to provide' },
+  ];
+
+  const issues = [];
+  let fixedContent = content;
+
+  bannedWords.forEach((word) => {
+    const detectRegex = new RegExp(word.replace(/[.*+?^${}()|[\]\\]/g, '\\$&'), 'gi');
+    const matches = content.match(detectRegex);
+    if (matches && matches.length > 0) {
+      issues.push(`Detected risky phrase: "${word}" (${matches.length} occurrence${matches.length > 1 ? 's' : ''})`);
+      console.log(`Agent 2: Found banned phrase "${word}" ${matches.length} time(s)`);
+    }
+  });
+
+  replacementRules.forEach((rule) => {
+    const replaceRegex = new RegExp(rule.from.replace(/[.*+?^${}()|[\]\\]/g, '\\$&'), 'gi');
+    if (replaceRegex.test(fixedContent)) {
+      fixedContent = fixedContent.replace(replaceRegex, rule.to);
+      console.log(`Agent 2: Replaced "${rule.from}" with "${rule.to}"`);
+    }
+  });
+
+  const status = issues.length > 0 ? 'REJECTED_AND_FIXED' : 'APPROVED';
+  console.log(`Agent 2: Compliance status ${status}`);
 
   return {
-    issues: [],
+    issues,
     fixedContent,
+    status,
   };
 }
 
-function adaptContent(content) {
+async function adaptContent(content) {
   console.log('Agent 3: Content adaptation started');
+  console.log('[DEBUG] adaptContent executing with AI-generated source content', {
+    contentLength: content.length,
+  });
 
-  const topicMatch = content.match(/Initial draft for: "(.+?)"/);
-  const topic = topicMatch ? topicMatch[1] : 'this topic';
+  const topicLine = content
+    .split('\n')
+    .find((line) => line.trim().toLowerCase().startsWith('topic:'));
+  const topic = topicLine ? topicLine.split(':').slice(1).join(':').trim() : 'this topic';
 
-  return {
-    linkedin: `Excited to share insights about ${topic}!\n\nIn today's fast-paced market, understanding ${topic} is crucial for success.\n\n#Innovation #Business #Strategy`,
-    twitter: `Breaking down ${topic} in 2024:\n\n- Strategic focus\n- Audience-first approach\n- Data-driven decisions\n\n#TechTrends #Innovation`,
-    faq: `Q: What is ${topic}?\nA: ${topic} is a practical approach to modern business challenges.\n\nQ: Who should use this?\nA: Teams and professionals aiming for stronger strategic outcomes.\n\nQ: How do I get started?\nA: Start with audience needs, then align with measurable goals.`,
-  };
+  const linkedinPrompt = `Convert the following content into a high-quality LinkedIn post.
+
+${content}
+
+Requirements:
+
+* Start with a strong hook (attention-grabbing first line)
+* Keep it professional and engaging
+* Use short paragraphs for readability
+* Add 2-3 relevant insights
+* End with a thought-provoking question or call-to-action
+* Include 3-5 relevant hashtags
+
+Avoid generic wording. Make it sound like a real industry expert wrote it.`;
+
+  const twitterPrompt = `Convert the following content into a compelling Twitter/X post.
+
+${content}
+
+Requirements:
+
+* Maximum 280 characters
+* Strong hook in the first line
+* Make it engaging and slightly bold
+* Include 1-2 key insights
+* Add 2-3 relevant hashtags
+
+Make it concise, impactful, and scroll-stopping.`;
+
+  const faqPrompt = `Generate 4-5 high-quality FAQs based on the following content.
+
+${content}
+
+Requirements:
+
+* Questions should be realistic and user-focused
+* Answers should be clear, concise, and informative
+* Avoid generic answers
+* Make it useful for someone new to the topic
+
+Format:
+Q: ...
+A: ...`;
+
+  let linkedin = await callAI(linkedinPrompt);
+  if (linkedin === AI_FALLBACK_MESSAGE) {
+    linkedin = createFallbackText('linkedin', topic);
+    console.log('[DEBUG] Pipeline continued with fallback data', {
+      stage: 'linkedin',
+    });
+  }
+  console.log('[DEBUG] LinkedIn adaptation generated', {
+    outputLength: linkedin.length,
+  });
+  let twitter = await callAI(twitterPrompt);
+  if (twitter === AI_FALLBACK_MESSAGE) {
+    twitter = createFallbackText('twitter', topic);
+    console.log('[DEBUG] Pipeline continued with fallback data', {
+      stage: 'twitter',
+    });
+  }
+  console.log('[DEBUG] Twitter adaptation generated', {
+    outputLength: twitter.length,
+  });
+  let faq = await callAI(faqPrompt);
+  if (faq === AI_FALLBACK_MESSAGE) {
+    faq = createFallbackText('faq', topic);
+    console.log('[DEBUG] Pipeline continued with fallback data', {
+      stage: 'faq',
+    });
+  }
+  console.log('[DEBUG] FAQ adaptation generated', {
+    outputLength: faq.length,
+  });
+
+  return { linkedin, twitter, faq };
 }
 
-app.post('/runPipeline', (req, res) => {
+app.post('/runPipeline', async (req, res) => {
   const { topic } = req.body;
   const safeTopic = topic || 'Untitled Topic';
 
-  // Agent-based flow: draft -> compliance -> adaptation
-  const draft = generateDraft(safeTopic);
-  const compliance = checkCompliance(draft);
-  const outputs = adaptContent(compliance.fixedContent);
+  try {
+    console.log('[DEBUG] /runPipeline called', {
+      topic: safeTopic,
+      hasApiKey: Boolean(OPENROUTER_API_KEY),
+    });
 
-  const responseData = {
-    draft,
-    compliance,
-    outputs,
-    logs: [
-      {
-        step: 1,
-        agent: 'Draft Agent',
-        action: 'Draft generation completed',
-        status: 'success',
-        timestamp: new Date().toISOString(),
-        details: `Generated draft for topic: ${safeTopic}`,
-      },
-      {
-        step: 2,
-        agent: 'Compliance Agent',
-        action: 'Compliance check completed',
-        status: 'success',
-        timestamp: new Date().toISOString(),
-        details: 'Dummy compliance checks passed',
-      },
-      {
-        step: 3,
-        agent: 'Adaptation Agent',
-        action: 'Content adaptation completed',
-        status: 'success',
-        timestamp: new Date().toISOString(),
-        details: 'Dummy channel-specific outputs generated',
-      },
-    ],
-  };
+    // Agent-based flow: draft -> compliance -> adaptation
+    const draftPrompt = generateDraft(safeTopic);
+    let draft = await callAI(draftPrompt);
+    if (draft === AI_FALLBACK_MESSAGE) {
+      draft = createFallbackText('draft', safeTopic);
+      console.log('[DEBUG] Pipeline continued with fallback data', {
+        stage: 'draft',
+      });
+    }
+    console.log('[DEBUG] Draft generated from AI', {
+      draftLength: draft.length,
+    });
+    const compliance = checkCompliance(draft);
+    console.log('[DEBUG] Compliance check completed', {
+      issueCount: compliance.issues.length,
+      fixedContentLength: compliance.fixedContent.length,
+      status: compliance.status,
+    });
+    const outputs = await adaptContent(compliance.fixedContent);
+    console.log('[DEBUG] Pipeline outputs ready', {
+      linkedinLength: outputs.linkedin.length,
+      twitterLength: outputs.twitter.length,
+      faqLength: outputs.faq.length,
+    });
 
-  setTimeout(() => {
+    const responseData = {
+      draft,
+      compliance,
+      outputs,
+      logs: [
+        {
+          step: 1,
+          agent: 'Draft Agent',
+          action: 'Draft generation completed',
+          status: 'success',
+          timestamp: new Date().toISOString(),
+          details: draft.includes(AI_FALLBACK_MESSAGE)
+            ? 'AI call failed - using fallback'
+            : `Generated draft for topic: ${safeTopic}`,
+        },
+        {
+          step: 2,
+          agent: 'Compliance Agent',
+          action:
+            compliance.issues.length > 0 ? 'Violation detected' : 'Content approved',
+          status: 'success',
+          timestamp: new Date().toISOString(),
+          details:
+            compliance.issues.length > 0
+              ? `${compliance.issues.length} issue(s) detected and fixed`
+              : 'No compliance issues found',
+        },
+        {
+          step: 3,
+          agent: 'Adaptation Agent',
+          action: 'AI LinkedIn post generated',
+          status: 'success',
+          timestamp: new Date().toISOString(),
+          details: outputs.linkedin.includes(AI_FALLBACK_MESSAGE)
+            ? 'AI call failed - using fallback'
+            : 'LinkedIn output generated via OpenRouter',
+        },
+        {
+          step: 4,
+          agent: 'Adaptation Agent',
+          action: 'AI Twitter post generated',
+          status: 'success',
+          timestamp: new Date().toISOString(),
+          details: outputs.twitter.includes(AI_FALLBACK_MESSAGE)
+            ? 'AI call failed - using fallback'
+            : 'Twitter/X output generated via OpenRouter',
+        },
+        {
+          step: 5,
+          agent: 'Adaptation Agent',
+          action: 'AI FAQ generated',
+          status: 'success',
+          timestamp: new Date().toISOString(),
+          details: outputs.faq.includes(AI_FALLBACK_MESSAGE)
+            ? 'AI call failed - using fallback'
+            : 'FAQ output generated via OpenRouter',
+        },
+      ],
+    };
+
     res.json(responseData);
-  }, 2000);
+  } catch (error) {
+    console.error('[ERROR] Pipeline execution failed unexpectedly, returning fallback response', {
+      message: error instanceof Error ? error.message : 'Unknown pipeline error',
+      error,
+    });
+
+    const fallbackDraft = createFallbackText('draft', safeTopic);
+    const fallbackCompliance = checkCompliance(fallbackDraft);
+    const fallbackOutputs = {
+      linkedin: createFallbackText('linkedin', safeTopic),
+      twitter: createFallbackText('twitter', safeTopic),
+      faq: createFallbackText('faq', safeTopic),
+    };
+
+    console.log('[DEBUG] Pipeline continued with fallback data', {
+      stage: 'route-catch',
+    });
+
+    res.json({
+      draft: fallbackDraft,
+      compliance: fallbackCompliance,
+      outputs: fallbackOutputs,
+      logs: [
+        {
+          step: 1,
+          agent: 'Draft Agent',
+          action: 'Draft generation completed',
+          status: 'success',
+          timestamp: new Date().toISOString(),
+          details: 'AI call failed - using fallback',
+        },
+        {
+          step: 2,
+          agent: 'Compliance Agent',
+          action: 'Content approved',
+          status: 'success',
+          timestamp: new Date().toISOString(),
+          details: 'Pipeline continued with fallback data',
+        },
+        {
+          step: 3,
+          agent: 'Adaptation Agent',
+          action: 'AI LinkedIn post generated',
+          status: 'success',
+          timestamp: new Date().toISOString(),
+          details: 'AI call failed - using fallback',
+        },
+        {
+          step: 4,
+          agent: 'Adaptation Agent',
+          action: 'AI Twitter post generated',
+          status: 'success',
+          timestamp: new Date().toISOString(),
+          details: 'AI call failed - using fallback',
+        },
+        {
+          step: 5,
+          agent: 'Adaptation Agent',
+          action: 'AI FAQ generated',
+          status: 'success',
+          timestamp: new Date().toISOString(),
+          details: 'AI call failed - using fallback',
+        },
+      ],
+    });
+  }
 });
 
 app.get('/health', (req, res) => {

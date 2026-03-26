@@ -1,0 +1,55 @@
+{
+  "draft": "AI service temporarily unavailable. Showing fallback content.\n\nTopic: TypeScript\n\nThis fallback draft summarizes the core idea, why it matters to the audience, and the practical value it can provide. It is safe to continue the pipeline with this content while the AI service recovers.",
+  "compliance": {
+    "issues": [],
+    "fixedContent": "AI service temporarily unavailable. Showing fallback content.\n\nTopic: TypeScript\n\nThis fallback draft summarizes the core idea, why it matters to the audience, and the practical value it can provide. It is safe to continue the pipeline with this content while the AI service recovers.",
+    "status": "APPROVED"
+  },
+  "outputs": {
+    "linkedin": "AI service temporarily unavailable. Showing fallback content.\n\nTypeScript still matters because teams need clearer messaging, practical value, and consistent execution.\n\nWhat would you want to highlight first?\n\n#AI #Content #Strategy",
+    "twitter": "AI service temporarily unavailable. Showing fallback content for TypeScript. Clear messaging, practical value, and consistent execution still matter. #AI #Content",
+    "faq": "AI service temporarily unavailable. Showing fallback content.\n\nQ: What is this content about?\nA: It provides a fallback summary for TypeScript while the AI service is unavailable.\n\nQ: Can the pipeline still continue?\nA: Yes. The backend is designed to keep the workflow running with fallback content.\n\nQ: Is the frontend still using the API response?\nA: Yes. The frontend continues to render the backend response even when fallback content is used."
+  },
+  "logs": [
+    {
+      "step": 1,
+      "agent": "Draft Agent",
+      "action": "Draft generation completed",
+      "status": "success",
+      "timestamp": "2026-03-26T07:15:58.520Z",
+      "details": "AI call failed - using fallback"
+    },
+    {
+      "step": 2,
+      "agent": "Compliance Agent",
+      "action": "Content approved",
+      "status": "success",
+      "timestamp": "2026-03-26T07:15:58.520Z",
+      "details": "No compliance issues found"
+    },
+    {
+      "step": 3,
+      "agent": "Adaptation Agent",
+      "action": "AI LinkedIn post generated",
+      "status": "success",
+      "timestamp": "2026-03-26T07:15:58.520Z",
+      "details": "AI call failed - using fallback"
+    },
+    {
+      "step": 4,
+      "agent": "Adaptation Agent",
+      "action": "AI Twitter post generated",
+      "status": "success",
+      "timestamp": "2026-03-26T07:15:58.520Z",
+      "details": "Twitter/X output generated via OpenRouter"
+    },
+    {
+      "step": 5,
+      "agent": "Adaptation Agent",
+      "action": "AI FAQ generated",
+      "status": "success",
+      "timestamp": "2026-03-26T07:15:58.520Z",
+      "details": "AI call failed - using fallback"
+    }
+  ]
+}

@@ -2,7 +2,6 @@
 # Dependencies
 # --------------------------------------------------
 node_modules/
-**/node_modules/
 
 # --------------------------------------------------
 # Build outputs / caches
@@ -12,6 +11,8 @@ dist-ssr/
 build/
 out/
 coverage/
+.vite/
+*.tsbuildinfo
 .cache/
 .turbo/
 .parcel-cache/
@@ -27,8 +28,11 @@ temp/
 # --------------------------------------------------
 .env
 .env.*
+server/.env
+server/.env.*
 !.env.example
 !.env.*.example
+!server/.env.example
 *.local
 
 # --------------------------------------------------
@@ -63,3 +67,4 @@ desktop.ini
 # --------------------------------------------------
 *.pid
 *.pid.lock
+*.seed
