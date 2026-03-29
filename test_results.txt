@@ -1,0 +1,16 @@
+
+--- Testing Gemini-OpenAI ---
+Status: 404
+Response: [{
+  "error": {
+    "code": 404,
+    "message": "models/gemini-1.5-flash is not found for API version v1main, or is not supported for generateContent. Call ListModels to see the list of available models and their supported methods.",
+    "status": "NOT_FOUND"
+  }
+}
+]
+
+--- Testing Groq ---
+Status: 200
+Response: {"id":"chatcmpl-52b7a40c-d004-4f1c-b689-dc0a6344c2f6","object":"chat.completion","created":1774691473,"model":"llama-3.1-8b-instant","choices":[{"index":0,"message":{"role":"assistant","content":"Hello! How can I assist you today?"},"logprobs":null,"finish_reason":"stop"}],"usage":{"queue_time":0.046847489,"prompt_tokens":37,"prompt_time":0.001787491,"completion_tokens":10,"completion_time":0.011273713,"total_tokens":47,"total_time":0.013061204},"usage_breakdown":null,"system_fingerprint":"fp_f757f4b0bf","x_groq":{"id":"req_01kmsxnp1qf3r9v0snmnv7vdwe","seed":665912190},"service_tier":"on_demand"}
+
