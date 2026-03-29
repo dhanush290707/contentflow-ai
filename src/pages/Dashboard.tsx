@@ -6,6 +6,8 @@ import ComplianceSection from '../components/ComplianceSection';
 import FinalOutputs from '../components/FinalOutputs';
 import AgentLogs from '../components/AgentLogs';
 
+const API_BASE_URL = import.meta.env.VITE_API_BASE_URL || '/api';
+
 interface PipelineData {
   draft: string;
   compliance: {
@@ -29,6 +31,70 @@ interface PipelineData {
 
 interface DashboardProps {
   onLogout: () => void;
+}
+
+function buildFallbackPipelineData(topic: string): PipelineData {
+  const normalizedTopic = topic.trim() || 'this topic';
+  const fallbackDraft = `AI service temporarily unavailable. Showing fallback content.
+
+Topic: ${normalizedTopic}
+
+This fallback draft highlights the core problem, why it matters for modern teams, and the practical value a solution can provide while the full pipeline is unavailable.`;
+
+  const fixedContent = fallbackDraft.replace(/guarantee|guarantees|risk-free|no risk|100% safe/gi, 'managed');
+  const timestamp = new Date().toISOString();
+
+  return {
+    draft: fallbackDraft,
+    compliance: {
+      issues: [],
+      fixedContent,
+    },
+    outputs: {
+      linkedin: `AI service temporarily unavailable, so this LinkedIn draft was generated locally.
+
+${normalizedTopic} is becoming a priority for teams that need stronger execution, better visibility, and more reliable collaboration.
+
+What outcome would matter most to your team?
+
+#AI #Productivity #RemoteWork`,
+      twitter: `AI service temporarily unavailable. ${normalizedTopic} still matters for teams that need better visibility, coordination, and execution. #AI #Productivity`,
+      faq: `Q: Why am I seeing fallback content?
+A: The app could not complete the live pipeline, so it generated a local backup response.
+
+Q: Can I still review the content structure?
+A: Yes. The fallback keeps the same draft, compliance, and output sections available.
+
+Q: What should I do next?
+A: Keep the backend running and try the request again for live AI-generated results.`,
+    },
+    logs: [
+      {
+        step: 1,
+        agent: 'Draft Agent',
+        action: 'Fallback draft generated',
+        status: 'success',
+        timestamp,
+        details: 'Local fallback content was used because the live pipeline was unavailable.',
+      },
+      {
+        step: 2,
+        agent: 'Compliance Agent',
+        action: 'Fallback compliance review completed',
+        status: 'success',
+        timestamp,
+        details: 'Fallback content was checked and prepared for rendering.',
+      },
+      {
+        step: 3,
+        agent: 'Adaptation Agent',
+        action: 'Fallback channel outputs generated',
+        status: 'success',
+        timestamp,
+        details: 'LinkedIn, Twitter, and FAQ sections were generated locally.',
+      },
+    ],
+  };
 }
 
 const Dashboard: React.FC<DashboardProps> = ({ onLogout }) => {
@@ -60,19 +126,26 @@ const Dashboard: React.FC<DashboardProps> = ({ onLogout }) => {
     setError(null);
 
     try {
-      const response = await fetch('http://localhost:3001/runPipeline', {
-        method: 'POST',
-        headers: {
-          'Content-Type': 'application/json',
-        },
-        body: JSON.stringify({ topic }),
-      });
+      let result: PipelineData;
 
-      if (!response.ok) {
-        throw new Error('Pipeline execution failed');
+      try {
+        const response = await fetch(`${API_BASE_URL}/runPipeline`, {
+          method: 'POST',
+          headers: {
+            'Content-Type': 'application/json',
+          },
+          body: JSON.stringify({ topic }),
+        });
+
+        if (!response.ok) {
+          throw new Error(`Pipeline request failed with status ${response.status}`);
+        }
+
+        result = await response.json();
+      } catch {
+        result = buildFallbackPipelineData(topic);
+        setError('Live pipeline is unavailable right now, so fallback content is being shown.');
       }
-
-      const result: PipelineData = await response.json();
 
       setLoading(false);
       setRevealing(true);
